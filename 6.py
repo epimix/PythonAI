@@ -1,25 +1,25 @@
 from sklearn.datasets import load_wine
-from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
 import tensorflow as tf
 import numpy as np
-from sklearn.metrics import classification_report
+import pandas as pd
 
 wine = load_wine()
 X = wine.data
 y = wine.target
 
-print("Original features:\n", X[:5])
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
-print("Normalized features:\n", X[:5])
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
 
 model = tf.keras.Sequential([
-    tf.keras.layers.Dense(16, activation='relu', input_shape=(X_train.shape[1],)),
+    tf.keras.layers.Dense(16, activation='relu', input_shape=(X.shape[1],)),
     tf.keras.layers.Dense(8, activation='relu'),
     tf.keras.layers.Dense(3)
 ])
@@ -31,27 +31,57 @@ model.compile(
 )
 
 
+early_stopping = tf.keras.callbacks.EarlyStopping(
+    monitor='val_loss',
+    patience=10,
+    restore_best_weights=True
+)
+
 model.fit(
     X_train,
     y_train,
-    epochs=20,
+    validation_split=0.2,   
+    epochs=200,
     batch_size=8,
+    callbacks=[early_stopping],
     verbose=1
 )
 
+
 print("\n--- Results ---")
-test_loss, test_acc = model.evaluate(X_test, y_test)
-print(f"Accuracy: {test_acc:.4f}")
+loss, acc = model.evaluate(X_test, y_test)
+print("Accuracy:", acc)
 
-y_pred_logits = model.predict(X_test)
-y_pred = np.argmax(y_pred_logits, axis=1)
-print("\nClassification report:")
-print(classification_report(y_test, y_pred, target_names=wine.target_names))
+y_pred = np.argmax(model.predict(X_test), axis=1)
 
-print("\n--- Prediction of varieties ---")
-for i in range(5):
-    print(f"Sample {i+1}: Real - {wine.target_names[y_test[i]]}, Prediction - {wine.target_names[y_pred[i]]}")
+print(classification_report(
+    y_test,
+    y_pred,
+    target_names=wine.target_names
+))
 
-print("\n--- Conclusion ---")
-print("1. Отримана точність: близько 95-100% після нормалізації.")
-print("2. Класи визначаються рівномірно добре, 'class_0' та 'class_2' часто мають 100% точність.")
+model.save("wine_model.h5")
+print("\nModel saved!")
+
+
+
+samples = 20   
+mean = np.mean(X_train, axis=0)
+std = np.std(X_train, axis=0)
+
+X_new = np.random.normal(mean, std, (samples, X.shape[1]))
+
+print("\nGenerated dataset:")
+print(X_new[:5])
+
+loaded_model = tf.keras.models.load_model("wine_model.h5")
+
+pred_logits = loaded_model.predict(X_new)
+pred_classes = np.argmax(pred_logits, axis=1)
+
+print("\nPredictions for generated dataset:")
+
+for i in range(samples):
+    print(
+        f"Sample {i+1}: {wine.target_names[pred_classes[i]]}"
+    )
